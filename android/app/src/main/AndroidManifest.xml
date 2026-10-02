@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Permissão para usar a internet -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Permissão para gravar áudio -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:label="english_practice_app"
         android:name="${applicationName}"

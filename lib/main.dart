@@ -1,7 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:translator/translator.dart'; // 1. Nova importação do tradutor
+import 'package:translator/translator.dart';
+import 'package:record/record.dart'; // Nova importação
+import 'package:permission_handler/permission_handler.dart'; // Nova importação
+import 'package:path_provider/path_provider.dart'; // Nova importação
 
 void main() {
   runApp(const EnglishPracticeApp());
@@ -38,17 +41,16 @@ class PracticeScreen extends StatefulWidget {
 
 class _PracticeScreenState extends State<PracticeScreen> {
   final TextEditingController _portugueseController = TextEditingController();
-  
-  // A frase traduzida começa vazia agora
   String _translatedText = ""; 
-  
-  // 2. Variável para mostrar o ícone de carregamento durante a tradução
   bool _isTranslating = false;
 
   final FlutterTts flutterTts = FlutterTts();
-  
-  // 3. Instância do Tradutor
   final GoogleTranslator translator = GoogleTranslator();
+  
+  // Instância do gravador de áudio
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _isRecording = false;
+  String? _audioFilePath;
 
   @override
   void initState() {
@@ -70,40 +72,74 @@ class _PracticeScreenState extends State<PracticeScreen> {
     }
   }
 
-  // 4. Função Assíncrona de Tradução
   Future<void> _translateText() async {
     final textToTranslate = _portugueseController.text.trim();
-    
-    // Se o campo estiver vazio, não faz nada
     if (textToTranslate.isEmpty) return;
 
-    // Atualiza o ecrã para mostrar o modo "a carregar"
-    setState(() {
-      _isTranslating = true;
-    });
+    setState(() { _isTranslating = true; });
 
     try {
-      // Chama a API de tradução de PT para EN
       var translation = await translator.translate(textToTranslate, from: 'pt', to: 'en');
-      
-      // Atualiza o ecrã com o resultado
       setState(() {
         _translatedText = translation.text;
         _isTranslating = false;
       });
     } catch (e) {
-      // Em caso de erro (ex: sem internet), voltamos ao normal
-      debugPrint("Erro na tradução: $e");
-      setState(() {
-        _isTranslating = false;
-      });
-      
-      // Mostra um aviso ao utilizador
+      setState(() { _isTranslating = false; });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Erro ao traduzir. Verifique a sua internet.')),
         );
       }
+    }
+  }
+
+  // Função para controlar a gravação
+  Future<void> _toggleRecording() async {
+    try {
+      if (_isRecording) {
+        // Se está a gravar, mandamos parar
+        final path = await _audioRecorder.stop();
+        setState(() {
+          _isRecording = false;
+          _audioFilePath = path;
+        });
+        debugPrint("Áudio guardado com sucesso em: $_audioFilePath");
+        
+        // Aqui, no próximo passo, enviaremos este ficheiro para a Azure!
+        
+      } else {
+        // Pede permissão ao Android
+        final status = await Permission.microphone.request();
+        
+        if (status.isGranted) {
+          // Descobre a pasta temporária do telemóvel
+          final dir = await getApplicationDocumentsDirectory();
+          final filePath = '${dir.path}/audio_pronuncia.wav';
+          
+          // Inicia a gravação configurada exatamente para o padrão da Azure API
+          await _audioRecorder.start(
+            const RecordConfig(
+              encoder: AudioEncoder.wav,
+              sampleRate: 16000,
+              numChannels: 1, // Mono
+            ),
+            path: filePath,
+          );
+          
+          setState(() {
+            _isRecording = true;
+          });
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('É necessário permitir o uso do microfone.')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro na gravação: $e");
     }
   }
 
@@ -170,6 +206,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   void dispose() {
     _portugueseController.dispose();
     flutterTts.stop();
+    _audioRecorder.dispose(); // Limpamos o gravador da memória
     super.dispose();
   }
 
@@ -186,7 +223,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      // Esconder o teclado quando se toca fora do campo de texto
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Stack(
@@ -226,7 +262,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: InkWell(
-                        // 5. O botão agora chama a nossa função de tradução e está desativado se estiver a carregar
                         onTap: _isTranslating ? null : _translateText,
                         borderRadius: BorderRadius.circular(30),
                         child: _buildGlassContainer(
@@ -234,7 +269,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // 6. Mostramos uma roda de carregamento ou o texto do botão
                               if (_isTranslating)
                                 SizedBox(
                                   width: 20,
@@ -261,8 +295,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       ),
                     ),
                     const SizedBox(height: 40),
-                    
-                    // Só mostra o título "Tradução:" se houver texto traduzido
                     if (_translatedText.isNotEmpty) ...[
                       const Text(
                         'Tradução:',
@@ -276,35 +308,34 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       const SizedBox(height: 16),
                       _buildClickableWords(_translatedText),
                     ],
-                    
                     const Spacer(),
+                    
+                    // Atualização visual do botão de microfone
                     Center(
-                      child: InkWell(
-                        onTap: () {
-                          debugPrint("Iniciou gravação de pronúncia");
-                        },
-                        borderRadius: BorderRadius.circular(50),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(50),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: Container(
-                              height: 80,
-                              width: 80,
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  width: 2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.mic, 
-                                size: 40, 
-                                color: Colors.white,
-                              ),
+                      child: GestureDetector(
+                        onTap: _toggleRecording,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          height: _isRecording ? 90 : 80, // Aumenta de tamanho enquanto grava
+                          width: _isRecording ? 90 : 80,
+                          decoration: BoxDecoration(
+                            // Fica vermelho e opaco a gravar, ou mantém o amarelo translúcido
+                            color: _isRecording 
+                                ? Colors.redAccent.withOpacity(0.8) 
+                                : Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _isRecording ? Colors.red : Theme.of(context).colorScheme.primary,
+                              width: 2,
                             ),
+                            boxShadow: _isRecording 
+                                ? [BoxShadow(color: Colors.redAccent.withOpacity(0.5), blurRadius: 20, spreadRadius: 5)] 
+                                : [],
+                          ),
+                          child: Icon(
+                            _isRecording ? Icons.stop : Icons.mic, 
+                            size: 40, 
+                            color: Colors.white,
                           ),
                         ),
                       ),
