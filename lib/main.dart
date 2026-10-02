@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart'; // Importação do TTS adicionada
 
 void main() {
   runApp(const EnglishPracticeApp());
@@ -13,15 +14,14 @@ class EnglishPracticeApp extends StatelessWidget {
     return MaterialApp(
       title: 'Prática de Inglês',
       theme: ThemeData(
-        // Usamos dark mode porque o fundo é predominantemente azul escuro
         brightness: Brightness.dark, 
         colorScheme: ColorScheme.fromSeed(
           brightness: Brightness.dark,
-          seedColor: const Color(0xFF1E3A8A), // Azul profundo inspirado na imagem
-          primary: const Color(0xFFFFC107), // Amarelo (estrelas/cristo) para os destaques
+          seedColor: const Color(0xFF1E3A8A),
+          primary: const Color(0xFFFFC107),
         ),
         useMaterial3: true,
-        fontFamily: 'Roboto', // Pode ser alterada depois para uma fonte mais minimalista
+        fontFamily: 'Roboto',
       ),
       home: const PracticeScreen(),
     );
@@ -39,19 +39,44 @@ class _PracticeScreenState extends State<PracticeScreen> {
   final TextEditingController _portugueseController = TextEditingController();
   String _translatedText = "Hello! This is how the glass app will look.";
 
-  // Widget reutilizável para o efeito de vidro
+  // 1. Instância do FlutterTts
+  final FlutterTts flutterTts = FlutterTts();
+
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+  }
+
+  // 2. Configuração inicial do motor de voz
+  Future<void> _initTts() async {
+    await flutterTts.setLanguage("en-US"); // Define o idioma para Inglês Americano
+    await flutterTts.setSpeechRate(0.4); // Deixa a voz um pouco mais lenta para facilitar o entendimento
+    await flutterTts.setVolume(1.0);
+    await flutterTts.setPitch(1.0);
+  }
+
+  // 3. Função para falar a palavra
+  Future<void> _speak(String text) async {
+    // Remove pontuações básicas para o leitor não ler coisas como "exclamação"
+    String cleanText = text.replaceAll(RegExp(r'[^\w\s]+'), '');
+    if (cleanText.isNotEmpty) {
+      await flutterTts.speak(cleanText);
+    }
+  }
+
   Widget _buildGlassContainer({required Widget child, EdgeInsetsGeometry? padding}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // Intensidade do desfoque
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
         child: Container(
           padding: padding ?? const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1), // Fundo semitransparente branco
+            color: Colors.white.withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2), // Borda subtil para dar brilho ao vidro
+              color: Colors.white.withOpacity(0.2),
               width: 1.5,
             ),
           ),
@@ -71,7 +96,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
       children: words.map((word) {
         return InkWell(
           onTap: () {
-            debugPrint("Clicou na palavra: $word");
+            // 4. Chama a função de voz ao clicar na palavra!
+            _speak(word);
           },
           borderRadius: BorderRadius.circular(12),
           child: ClipRRect(
@@ -81,7 +107,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.2), // Tonalidade amarela no vidro
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                   border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.5)),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -104,13 +130,13 @@ class _PracticeScreenState extends State<PracticeScreen> {
   @override
   void dispose() {
     _portugueseController.dispose();
+    flutterTts.stop(); // Importante parar o TTS ao fechar a tela
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Estendemos o corpo para trás da barra de navegação para a imagem ocupar tudo
       extendBodyBehindAppBar: true, 
       appBar: AppBar(
         title: const Text(
@@ -118,34 +144,28 @@ class _PracticeScreenState extends State<PracticeScreen> {
           style: TextStyle(fontWeight: FontWeight.w300, letterSpacing: 1.5),
         ),
         centerTitle: true,
-        backgroundColor: Colors.transparent, // Barra transparente
+        backgroundColor: Colors.transparent,
         elevation: 0,
       ),
       body: Stack(
         children: [
-          // 1. Imagem de Fundo a ocupar todo o ecrã
           Positioned.fill(
             child: Image.asset(
               'assets/fundo.jpg',
               fit: BoxFit.cover,
             ),
           ),
-          
-          // 2. Escurecimento subtil para garantir legibilidade
           Positioned.fill(
             child: Container(
               color: Colors.black.withOpacity(0.2),
             ),
           ),
-
-          // 3. Conteúdo da aplicação
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Área de Inserção de Texto com Efeito Vidro
                   _buildGlassContainer(
                     padding: const EdgeInsets.all(4),
                     child: TextField(
@@ -161,8 +181,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  
-                  // Botão de Tradução (Vidro com destaque amarelo)
                   Align(
                     alignment: Alignment.centerRight,
                     child: InkWell(
@@ -191,9 +209,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       ),
                     ),
                   ),
-                  
                   const SizedBox(height: 40),
-                  
                   const Text(
                     'Tradução:',
                     style: TextStyle(
@@ -204,13 +220,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
-                  // Palavras com efeito de vidro
                   _buildClickableWords(_translatedText),
-                  
                   const Spacer(),
-                  
-                  // Botão de Gravação
                   Center(
                     child: InkWell(
                       onTap: () {
